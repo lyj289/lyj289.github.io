@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>SVD fitting a plane</title>
+    </head>
+    <body>
+    <h2>Fitting a plane from the points , using the SVD</h2>
+    <script src="https://unpkg.com/three@0.147.0/build/three.js"></script>
+    <script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script src="https://unpkg.com/numeric@1.2.6/numeric-1.2.6.js"></script>
+    <script src="https://unpkg.com/dat.gui@0.7.9/build/dat.gui.js"></script>
+    <script>
+
+      var camera, scene, renderer;
+      var geometry, material, mesh;
+
+      const objectCaches = new Map();
+
+      THREE.Object3D.prototype.setName = function(name) {
+        this.name = name;
+        objectCaches.set(name, this)
+      }
+
+      const gui = new dat.GUI();
+
+      var guiParams = {
+        points: true,
+        fittedPlane: true,
+        planeNormal: false,
+        grid: false,
+      };
+      gui.add( guiParams, 'fittedPlane' );
+      gui.add( guiParams, 'points' );
+      gui.add( guiParams, 'planeNormal' );
+      gui.add( guiParams, 'grid' );
+
+      function addAxes(x=0, y = 0,z = 0) {
+          const axesHelper = new THREE.AxesHelper(10);
+          axesHelper.position.set(x,y,z);
+          scene.add( axesHelper );
+          return axesHelper;
+      }
+      function init() {
+
+          camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 500 );
+          camera.position.z = 13;
+
+          // camera.up = new THREE.Vector3(0,0,1)
+
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color( 0xffffff );
+
+          renderer = new THREE.WebGLRenderer( { antialias: true } );
+          renderer.setSize( 1000, 500 );
+          document.body.appendChild( renderer.domElement );
+          const controls = new THREE.OrbitControls( camera, renderer.domElement );
+
+          controls.update();
+
+          addAxes();
+
+          const gridHelper = new THREE.GridHelper( 25, 10 );
+
+          gridHelper.setName('grid');
+
+          addFitPlane();
+      }
+
+      function addVector(dir = new THREE.Vector3( 1, 1, 1 )) {
+          dir.normalize();
+
+          const origin = new THREE.Vector3( 0, 0, 0 );
+          const length = 1;
+          const hex = 0xf00ff0;
+
+          const arrowHelper = new THREE.ArrowHelper( dir, origin, length, hex );
+          return arrowHelper
+      }
+
+      function addFitPlane() {
+          geometry = new THREE.BufferGeometry();
+
+          const positions = [
+            [2,2,4],
+            [4,2,-1],
+            [-4,-7,-3],
+            [2,0,1]
+          ]
+
+          // for (var i = 0; i < 1000; i++) {
+          //    positions.push([Math.random() * 10 - 5 , Math.random() * 10 - 5, Math.random() * 2])
+          // }
+
+          // const positions = numeric.random([50,3])
+          const {U,S,V} = numeric.svd(positions);
+
+          const transposeV = numeric.transpose(V);
+
+          const normalVector = new THREE.Vector3(...transposeV[2])
+
+          console.log("V :", V);
+          console.log("The 3rd axis is, actually the normal of plane is: ", normalVector);
+
+          const center = numeric.div(numeric.add(...positions), positions.length);
+
+          geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions.flat(), 3 ) );
+
+          const material = new THREE.PointsMaterial( { size: 0.3} );
+          material.color.set('red');
+
+          const pointsObject = new THREE.Points( geometry, material );
+          pointsObject.setName('points');
+          scene.add(pointsObject);
+
+          const plane = new THREE.Plane();
+          plane.setFromNormalAndCoplanarPoint(normalVector, new THREE.Vector3(...center));
+
+          const fittedPlaneHelper = new THREE.PlaneHelper( plane, 15, 'red' );
+          fittedPlaneHelper.setName('fittedPlane');
+          scene.add(fittedPlaneHelper);
+
+          const planeNormalObject = addVector(normalVector);
+          planeNormalObject.setName('planeNormal');
+          scene.add(planeNormalObject);
+      }
+
+
+      function animate( time ) {
+          ['fittedPlane', 'points', 'planeNormal', 'grid'].forEach(v => {
+            const obj = objectCaches.get(v);
+            if (guiParams[v]) {
+              obj && scene.add(obj)
+            } else {
+              obj && scene.remove(obj)
+            }
+          })
+
+          renderer.render( scene, camera );
+          requestAnimationFrame( animate );
+      }
+
+      init();
+      window.scene = scene;
+
+      requestAnimationFrame( animate );
+    </script>
+  </body>
+</html>
